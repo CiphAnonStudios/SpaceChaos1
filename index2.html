@@ -1,0 +1,2568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Space Chaos</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #02030a;
+    font-family: Arial, Helvetica, sans-serif;
+    color: white;
+}
+
+canvas {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    cursor: crosshair;
+}
+
+.screen {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 20;
+    pointer-events: none;
+}
+
+.panel {
+    pointer-events: auto;
+    text-align: center;
+    padding: 35px 45px;
+    border: 1px solid rgba(0,220,255,.35);
+    border-radius: 22px;
+    background: rgba(3,8,20,.78);
+    backdrop-filter: blur(12px);
+    box-shadow:
+        0 0 30px rgba(0,180,255,.15),
+        inset 0 0 30px rgba(0,180,255,.04);
+}
+
+.title {
+    margin: 0;
+    font-size: clamp(45px, 9vw, 100px);
+    letter-spacing: 7px;
+    color: #64eaff;
+    text-shadow:
+        0 0 10px #00c8ff,
+        0 0 30px #0077ff;
+}
+
+.subtitle {
+    color: #9bb7ca;
+    margin: 10px 0 25px;
+    letter-spacing: 3px;
+}
+
+button {
+    border: 1px solid #4fe9ff;
+    color: white;
+    background: rgba(0,150,255,.15);
+    padding: 14px 28px;
+    border-radius: 12px;
+    font-size: 17px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: .15s;
+}
+
+button:hover {
+    background: rgba(0,200,255,.3);
+    box-shadow: 0 0 20px rgba(0,200,255,.4);
+    transform: scale(1.05);
+}
+
+#hud {
+    position: fixed;
+    top: 15px;
+    left: 15px;
+    z-index: 10;
+    display: none;
+    gap: 8px;
+    flex-direction: column;
+    pointer-events: none;
+}
+
+.hudBox {
+    background: rgba(0,0,0,.45);
+    border: 1px solid rgba(100,220,255,.2);
+    border-radius: 9px;
+    padding: 7px 12px;
+    font-size: 14px;
+    backdrop-filter: blur(5px);
+}
+
+#warn {
+    position: fixed;
+    top: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 11;
+    display: none;
+    font-size: 20px;
+    font-weight: 900;
+    letter-spacing: 3px;
+    color: #ff3d4f;
+    text-shadow:
+        0 0 8px red,
+        0 0 25px red;
+    pointer-events: none;
+}
+
+#tractorStatus {
+    color: #4dff9a;
+}
+
+#wormStatus {
+    color: #d879ff;
+}
+
+#chaosStatus {
+    color: #ffd35a;
+}
+
+#controls {
+    position: fixed;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    color: rgba(255,255,255,.4);
+    font-size: 12px;
+    pointer-events: none;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.failTitle {
+    color: #ff4b58;
+    text-shadow:
+        0 0 10px red,
+        0 0 30px red;
+}
+
+.scoreBig {
+    font-size: 28px;
+    margin: 15px 0;
+}
+
+#newHigh {
+    color: #ffe55c;
+    text-shadow: 0 0 12px #ffbd00;
+    display: none;
+}
+
+.shake {
+    animation: shake .12s infinite;
+}
+
+@keyframes shake {
+    0% { transform: translate(0,0); }
+    25% { transform: translate(4px,-3px); }
+    50% { transform: translate(-3px,4px); }
+    75% { transform: translate(3px,2px); }
+    100% { transform: translate(0,0); }
+}
+</style>
+</head>
+
+<body>
+
+<canvas id="game"></canvas>
+
+<div id="homeScreen" class="screen">
+    <div class="panel">
+        <h1 class="title">SPACE CHAOS</h1>
+        <div class="subtitle">SURVIVE THE ABSURDITY</div>
+        <button id="startBtn">LAUNCH</button>
+    </div>
+</div>
+
+<div id="hud">
+    <div class="hudBox">SCORE: <span id="score">0</span></div>
+    <div class="hudBox">HIGH: <span id="high">0</span></div>
+    <div id="tractorStatus" class="hudBox hidden">TRACTOR BEAM ACTIVE</div>
+    <div id="wormStatus" class="hudBox hidden">⚠ SPACE WORM</div>
+    <div id="chaosStatus" class="hudBox hidden">CHAOS EVENT</div>
+</div>
+
+<div id="warn"></div>
+
+<div id="controls">
+    MOUSE = AIM &nbsp; • &nbsp; CLICK / Z = FIRE &nbsp; • &nbsp; SPACE = THRUST &nbsp; • &nbsp; P = PAUSE
+</div>
+
+<div id="failScreen" class="screen hidden">
+    <div class="panel">
+        <h1 class="title failTitle">MISSION FAILED</h1>
+        <div class="scoreBig">SCORE: <span id="finalScore">0</span></div>
+        <div id="newHigh">NEW HIGH SCORE!</div>
+        <br>
+        <button id="replayBtn">REPLAY</button>
+        <button id="homeBtn">HOME</button>
+    </div>
+</div>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+let W = innerWidth;
+let H = innerHeight;
+
+canvas.width = W;
+canvas.height = H;
+
+window.addEventListener("resize", () => {
+    W = innerWidth;
+    H = innerHeight;
+    canvas.width = W;
+    canvas.height = H;
+});
+
+const homeScreen = document.getElementById("homeScreen");
+const failScreen = document.getElementById("failScreen");
+const hud = document.getElementById("hud");
+
+const scoreEl = document.getElementById("score");
+const highEl = document.getElementById("high");
+const finalScoreEl = document.getElementById("finalScore");
+const newHighEl = document.getElementById("newHigh");
+
+const warnEl = document.getElementById("warn");
+const tractorStatus = document.getElementById("tractorStatus");
+const wormStatus = document.getElementById("wormStatus");
+const chaosStatus = document.getElementById("chaosStatus");
+
+let gameRunning = false;
+let paused = false;
+
+let score = 0;
+let highScore = Number(localStorage.getItem("spaceChaosHigh") || 0);
+
+highEl.textContent = highScore;
+
+const mouse = {
+    x: W / 2,
+    y: H / 2
+};
+
+const keys = {};
+
+let stars = [];
+let asteroids = [];
+let bullets = [];
+let particles = [];
+let aliens = [];
+let satellites = [];
+let shootingStars = [];
+let beams = [];
+
+let screenShake = 0;
+
+let asteroidTimer = 0;
+let alienTimer = 0;
+let satelliteTimer = 0;
+let shootingStarTimer = 0;
+let chaosTimer = 0;
+let wormTimer = 8;
+
+let lastTime = performance.now();
+
+const player = {
+    x: W / 2,
+    y: H / 2,
+    vx: 0,
+    vy: 0,
+    radius: 14,
+    angle: 0,
+    thrustPower: 0.19,
+    friction: 0.992,
+    fireCooldown: 0,
+    alive: true
+};
+
+/* =========================
+   INPUT
+========================= */
+
+window.addEventListener("mousemove", e => {
+    mouse.x = e.clientX;
+    mouse.y = e.clientY;
+});
+
+window.addEventListener("keydown", e => {
+    keys[e.code] = true;
+
+    if (e.code === "KeyP" && gameRunning) {
+        paused = !paused;
+    }
+
+    if (
+        e.code === "Space" ||
+        e.code === "ArrowUp" ||
+        e.code === "ArrowDown" ||
+        e.code === "ArrowLeft" ||
+        e.code === "ArrowRight"
+    ) {
+        e.preventDefault();
+    }
+});
+
+window.addEventListener("keyup", e => {
+    keys[e.code] = false;
+});
+
+canvas.addEventListener("mousedown", e => {
+    if (e.button === 0) {
+        fireBullet();
+    }
+});
+
+/* =========================
+   BUTTONS
+========================= */
+
+document.getElementById("startBtn").onclick = startGame;
+document.getElementById("replayBtn").onclick = startGame;
+
+document.getElementById("homeBtn").onclick = () => {
+    gameRunning = false;
+    failScreen.classList.add("hidden");
+    homeScreen.classList.remove("hidden");
+    hud.style.display = "none";
+    warnEl.style.display = "none";
+};
+
+/* =========================
+   BACKGROUND
+========================= */
+
+function createBackground() {
+    stars = [];
+
+    for (let i = 0; i < 260; i++) {
+        stars.push({
+            x: Math.random() * W,
+            y: Math.random() * H,
+            size: Math.random() * 2 + .3,
+            speed: Math.random() * 18 + 4,
+            alpha: Math.random() * .8 + .2
+        });
+    }
+}
+
+createBackground();
+
+function updateBackground(dt) {
+    for (const s of stars) {
+        s.x -= s.speed * dt * 0.08;
+
+        if (s.x < 0) {
+            s.x = W;
+            s.y = Math.random() * H;
+        }
+    }
+}
+
+function drawBackground() {
+    ctx.fillStyle = "#02030a";
+    ctx.fillRect(0, 0, W, H);
+
+    for (const s of stars) {
+        ctx.globalAlpha = s.alpha;
+        ctx.fillStyle = "white";
+        ctx.fillRect(s.x, s.y, s.size, s.size);
+    }
+
+    ctx.globalAlpha = 1;
+}
+
+/* =========================
+   ASTEROIDS
+========================= */
+
+function createAsteroid(x, y, size = 3, angle = Math.random() * Math.PI * 2) {
+
+    const settings = {
+        3: { radius: 52, speed: 45 },
+        2: { radius: 31, speed: 70 },
+        1: { radius: 17, speed: 105 }
+    };
+
+    const s = settings[size];
+
+    const asteroid = {
+        x: x ?? Math.random() * W,
+        y: y ?? Math.random() * H,
+        vx: Math.cos(angle) * s.speed,
+        vy: Math.sin(angle) * s.speed,
+        radius: s.radius,
+        size,
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: (Math.random() - .5) * 1.5,
+        shape: []
+    };
+
+    const points = size === 3 ? 11 : size === 2 ? 9 : 7;
+
+    for (let i = 0; i < points; i++) {
+        asteroid.shape.push(
+            .72 + Math.random() * .4
+        );
+    }
+
+    asteroids.push(asteroid);
+}
+
+function splitAsteroid(a) {
+
+    const points = a.size === 3 ? 3 : 2;
+
+    for (let i = 0; i < points; i++) {
+
+        const angle =
+            Math.atan2(a.vy, a.vx) +
+            (i === 0 ? -1 : 1) * (0.8 + Math.random() * .6);
+
+        createAsteroid(
+            a.x,
+            a.y,
+            a.size - 1,
+            angle
+        );
+    }
+
+    explode(a.x, a.y, a.size === 3 ? 20 : 12);
+}
+
+/* =========================
+   BULLETS
+========================= */
+
+function fireBullet() {
+
+    if (!gameRunning || paused || !player.alive) return;
+    if (player.fireCooldown > 0) return;
+
+    const dx = mouse.x - player.x;
+    const dy = mouse.y - player.y;
+    const angle = Math.atan2(dy, dx);
+
+    bullets.push({
+        x: player.x + Math.cos(angle) * 18,
+        y: player.y + Math.sin(angle) * 18,
+        vx: Math.cos(angle) * 750 + player.vx,
+        vy: Math.sin(angle) * 750 + player.vy,
+        life: 1.4
+    });
+
+    player.fireCooldown = .13;
+
+    for (let i = 0; i < 3; i++) {
+        particles.push({
+            x: player.x,
+            y: player.y,
+            vx: -Math.cos(angle) * (40 + Math.random() * 40),
+            vy: -Math.sin(angle) * (40 + Math.random() * 40),
+            life: .25,
+            maxLife: .25,
+            size: 2,
+            type: "bullet"
+        });
+    }
+}
+
+/* =========================
+   PARTICLES
+========================= */
+
+function explode(x, y, amount = 15) {
+
+    for (let i = 0; i < amount; i++) {
+
+        const a = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 180 + 30;
+
+        particles.push({
+            x,
+            y,
+            vx: Math.cos(a) * speed,
+            vy: Math.sin(a) * speed,
+            life: Math.random() * .6 + .3,
+            maxLife: .9,
+            size: Math.random() * 4 + 1,
+            type: "explosion"
+        });
+    }
+
+    screenShake = Math.max(screenShake, 5);
+}
+
+function thrustParticles() {
+
+    const a = player.angle + Math.PI;
+
+    for (let i = 0; i < 2; i++) {
+
+        const spread = (Math.random() - .5) * .7;
+
+        particles.push({
+            x: player.x + Math.cos(a) * 12,
+            y: player.y + Math.sin(a) * 12,
+            vx:
+                Math.cos(a + spread) *
+                (50 + Math.random() * 80) +
+                player.vx * .2,
+            vy:
+                Math.sin(a + spread) *
+                (50 + Math.random() * 80) +
+                player.vy * .2,
+            life: .35 + Math.random() * .2,
+            maxLife: .55,
+            size: Math.random() * 4 + 2,
+            type: Math.random() > .5 ? "ice" : "smoke"
+        });
+    }
+}
+
+/* =========================
+   ALIENS
+========================= */
+
+function createAlien() {
+
+    const fromLeft = Math.random() < .5;
+
+    const alien = {
+        x: fromLeft ? -80 : W + 80,
+        y: 80 + Math.random() * (H - 160),
+
+        vx: fromLeft ? 90 + Math.random() * 70 : -90 - Math.random() * 70,
+
+        baseY: 0,
+        wobble: Math.random() * Math.PI * 2,
+
+        radius: 25,
+
+        beamType: Math.random() < .55 ? "red" : "green",
+
+        fireTimer: 2 + Math.random() * 3,
+
+        state: "flying",
+
+        laserAngle: 0,
+        laserTimer: 0
+    };
+
+    alien.baseY = alien.y;
+
+    aliens.push(alien);
+}
+
+function hasChargingLaser() {
+    return beams.some(b =>
+        b.type === "red" &&
+        (b.state === "warning" || b.state === "active")
+    );
+}
+
+function startAlienLaser(alien) {
+
+    if (hasChargingLaser()) return;
+
+    /*
+       IMPORTANT:
+       The alien picks an angle that is NOT directly aimed at the player.
+       This gives the player an actual dodge lane.
+    */
+
+    const playerAngle = Math.atan2(
+        player.y - alien.y,
+        player.x - alien.x
+    );
+
+    alien.laserAngle =
+        playerAngle +
+        (Math.random() < .5 ? -1 : 1) *
+        (0.45 + Math.random() * .8);
+
+    alien.state = "laserWarning";
+
+    alien.laserTimer = 1.35;
+
+    beams.push({
+        type: "red",
+        alien,
+        state: "warning",
+        angle: alien.laserAngle,
+        timer: 1.35,
+        width: 18,
+        maxWidth: 34
+    });
+}
+
+function updateAliens(dt) {
+
+    for (let i = aliens.length - 1; i >= 0; i--) {
+
+        const a = aliens[i];
+
+        if (a.state === "flying") {
+
+            a.x += a.vx * dt;
+
+            a.wobble += dt * 3;
+
+            a.y =
+                a.baseY +
+                Math.sin(a.wobble) * 55;
+
+            a.fireTimer -= dt;
+
+            if (
+                a.beamType === "red" &&
+                a.fireTimer <= 0
+            ) {
+                startAlienLaser(a);
+                a.fireTimer = 4 + Math.random() * 4;
+            }
+
+            if (
+                a.beamType === "green" &&
+                a.fireTimer <= 0
+            ) {
+                a.fireTimer = 3 + Math.random() * 3;
+            }
+        }
+
+        /*
+           LASER ALIENS STOP COMPLETELY.
+        */
+
+        else if (a.state === "laserWarning") {
+
+            a.vx = 0;
+
+            a.laserTimer -= dt;
+
+            if (a.laserTimer <= 0) {
+
+                a.state = "laser";
+
+                const beam = beams.find(
+                    b => b.alien === a &&
+                    b.type === "red"
+                );
+
+                if (beam) {
+                    beam.state = "active";
+                    beam.timer = .65;
+                }
+            }
+        }
+
+        else if (a.state === "laser") {
+
+            a.vx = 0;
+
+            a.laserTimer -= dt;
+
+            if (a.laserTimer <= 0) {
+
+                a.state = "flying";
+
+                a.vx =
+                    a.x < W / 2
+                    ? 120
+                    : -120;
+            }
+        }
+
+        if (
+            a.x < -180 ||
+            a.x > W + 180
+        ) {
+            aliens.splice(i, 1);
+        }
+    }
+}
+
+/* =========================
+   ALIEN BEAMS
+========================= */
+
+function updateBeams(dt) {
+
+    let warningActive = false;
+
+    for (let i = beams.length - 1; i >= 0; i--) {
+
+        const b = beams[i];
+
+        b.timer -= dt;
+
+        if (b.state === "warning") {
+            warningActive = true;
+        }
+
+        if (b.state === "active") {
+
+            const dx = Math.cos(b.angle);
+            const dy = Math.sin(b.angle);
+
+            const length = Math.max(W, H) * 2.5;
+
+            const x2 = b.alien.x + dx * length;
+            const y2 = b.alien.y + dy * length;
+
+            if (
+                pointLineDistance(
+                    player.x,
+                    player.y,
+                    b.alien.x,
+                    b.alien.y,
+                    x2,
+                    y2
+                ) <
+                player.radius + b.width / 2
+            ) {
+                failGame();
+                return;
+            }
+        }
+
+        if (b.timer <= 0) {
+
+            if (b.state === "warning") {
+
+                b.state = "active";
+                b.timer = .65;
+
+                if (b.alien) {
+                    b.alien.state = "laser";
+                    b.alien.laserTimer = .65;
+                }
+
+            } else {
+
+                beams.splice(i, 1);
+            }
+        }
+    }
+
+    if (warningActive) {
+
+        warnEl.style.display = "block";
+        warnEl.textContent = "⚠ ALIEN LASER LOCK — MOVE!";
+
+        const pulse =
+            .5 + Math.sin(performance.now() * .015) * .5;
+
+        warnEl.style.opacity = .55 + pulse * .45;
+
+    } else if (!worm.active) {
+
+        warnEl.style.display = "none";
+    }
+}
+
+function drawBeams() {
+
+    for (const b of beams) {
+
+        if (!b.alien) continue;
+
+        const dx = Math.cos(b.angle);
+        const dy = Math.sin(b.angle);
+
+        const length = Math.max(W, H) * 2.5;
+
+        const x2 = b.alien.x + dx * length;
+        const y2 = b.alien.y + dy * length;
+
+        ctx.save();
+
+        ctx.lineCap = "round";
+
+        if (b.state === "warning") {
+
+            const pulse =
+                .5 + Math.sin(performance.now() * .018) * .5;
+
+            ctx.globalAlpha = .2 + pulse * .3;
+
+            ctx.strokeStyle = "#ff233f";
+            ctx.lineWidth = 10 + pulse * 12;
+
+            ctx.setLineDash([25, 20]);
+
+            ctx.beginPath();
+            ctx.moveTo(b.alien.x, b.alien.y);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+
+            ctx.setLineDash([]);
+
+            ctx.globalAlpha = .9;
+
+            ctx.strokeStyle = "#ff5060";
+            ctx.lineWidth = 3;
+
+            ctx.beginPath();
+            ctx.moveTo(b.alien.x, b.alien.y);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+
+        } else {
+
+            ctx.shadowBlur = 35;
+            ctx.shadowColor = "#ff102f";
+
+            ctx.strokeStyle = "rgba(255,30,50,.55)";
+            ctx.lineWidth = 38;
+
+            ctx.beginPath();
+            ctx.moveTo(b.alien.x, b.alien.y);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+
+            ctx.shadowBlur = 15;
+
+            ctx.strokeStyle = "#ff233f";
+            ctx.lineWidth = 24;
+
+            ctx.beginPath();
+            ctx.moveTo(b.alien.x, b.alien.y);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+
+            ctx.strokeStyle = "#fff";
+            ctx.lineWidth = 5;
+
+            ctx.beginPath();
+            ctx.moveTo(b.alien.x, b.alien.y);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    }
+}
+
+function pointLineDistance(px, py, x1, y1, x2, y2) {
+
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+
+    const lenSq = dx * dx + dy * dy;
+
+    let t =
+        ((px - x1) * dx +
+         (py - y1) * dy) /
+        lenSq;
+
+    t = Math.max(0, Math.min(1, t));
+
+    const cx = x1 + t * dx;
+    const cy = y1 + t * dy;
+
+    return Math.hypot(px - cx, py - cy);
+}
+
+/* =========================
+   GREEN TRACTOR BEAM
+========================= */
+
+function updateTractor(dt) {
+
+    let active = false;
+
+    for (const a of aliens) {
+
+        if (a.beamType !== "green") continue;
+
+        if (
+            a.state !== "flying"
+        ) continue;
+
+        const dx = a.x - player.x;
+        const dy = a.y - player.y;
+
+        const dist = Math.hypot(dx, dy);
+
+        if (dist < 280) {
+
+            active = true;
+
+            const strength =
+                (1 - dist / 280) * 55;
+
+            player.vx += dx / Math.max(dist, 1) * strength * dt;
+            player.vy += dy / Math.max(dist, 1) * strength * dt;
+
+            player.vx *= 1 - dt * .55;
+            player.vy *= 1 - dt * .55;
+        }
+    }
+
+    tractorStatus.classList.toggle(
+        "hidden",
+        !active
+    );
+}
+
+/* =========================
+   ALIEN DRAW
+========================= */
+
+function drawAliens() {
+
+    for (const a of aliens) {
+
+        ctx.save();
+
+        ctx.translate(a.x, a.y);
+
+        if (a.state === "laserWarning" || a.state === "laser") {
+            ctx.shadowBlur = 25;
+            ctx.shadowColor = "#ff2038";
+        } else {
+            ctx.shadowBlur = 18;
+            ctx.shadowColor =
+                a.beamType === "red"
+                ? "#ff2038"
+                : "#31ff92";
+        }
+
+        ctx.fillStyle =
+            a.beamType === "red"
+            ? "#d92345"
+            : "#35e98b";
+
+        ctx.beginPath();
+
+        ctx.moveTo(-28, 5);
+        ctx.quadraticCurveTo(0, -28, 28, 5);
+        ctx.quadraticCurveTo(0, 18, -28, 5);
+
+        ctx.fill();
+
+        ctx.fillStyle = "#07101a";
+
+        ctx.beginPath();
+        ctx.ellipse(0, -1, 13, 9, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#fff";
+
+        ctx.beginPath();
+        ctx.arc(-5, -2, 3, 0, Math.PI * 2);
+        ctx.arc(5, -2, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+
+        if (a.beamType === "green" && a.state === "flying") {
+
+            const dist = Math.hypot(
+                a.x - player.x,
+                a.y - player.y
+            );
+
+            if (dist < 280) {
+
+                ctx.save();
+
+                ctx.globalAlpha =
+                    .12 +
+                    (1 - dist / 280) * .18;
+
+                ctx.fillStyle = "#25ff9a";
+
+                ctx.beginPath();
+
+                ctx.moveTo(a.x - 16, a.y + 10);
+                ctx.lineTo(a.x - 100, a.y + 300);
+                ctx.lineTo(a.x + 100, a.y + 300);
+                ctx.lineTo(a.x + 16, a.y + 10);
+
+                ctx.closePath();
+
+                ctx.fill();
+
+                ctx.restore();
+            }
+        }
+    }
+}
+
+/* =========================
+   SATELLITES
+========================= */
+
+function createSatellite() {
+
+    const side = Math.floor(Math.random() * 4);
+
+    let x, y;
+
+    if (side === 0) {
+        x = -50;
+        y = Math.random() * H;
+    } else if (side === 1) {
+        x = W + 50;
+        y = Math.random() * H;
+    } else if (side === 2) {
+        x = Math.random() * W;
+        y = -50;
+    } else {
+        x = Math.random() * W;
+        y = H + 50;
+    }
+
+    const angle = Math.atan2(
+        H / 2 - y,
+        W / 2 - x
+    );
+
+    satellites.push({
+        x,
+        y,
+        vx: Math.cos(angle) * 35,
+        vy: Math.sin(angle) * 35,
+        radius: 22,
+        life: 20,
+        rotation: 0
+    });
+}
+
+function updateSatellites(dt) {
+
+    for (let i = satellites.length - 1; i >= 0; i--) {
+
+        const s = satellites[i];
+
+        s.x += s.vx * dt;
+        s.y += s.vy * dt;
+        s.rotation += dt;
+
+        s.life -= dt;
+
+        if (
+            s.life <= 0 ||
+            s.x < -100 ||
+            s.x > W + 100 ||
+            s.y < -100 ||
+            s.y > H + 100
+        ) {
+            satellites.splice(i, 1);
+            continue;
+        }
+
+        if (
+            Math.hypot(
+                s.x - player.x,
+                s.y - player.y
+            ) <
+            s.radius + player.radius
+        ) {
+            failGame();
+        }
+    }
+}
+
+function drawSatellites() {
+
+    for (const s of satellites) {
+
+        ctx.save();
+
+        ctx.translate(s.x, s.y);
+        ctx.rotate(s.rotation);
+
+        ctx.strokeStyle = "#b9c5d1";
+        ctx.lineWidth = 3;
+
+        ctx.fillStyle = "#526477";
+
+        ctx.fillRect(-10, -10, 20, 20);
+
+        ctx.strokeRect(-10, -10, 20, 20);
+
+        ctx.fillStyle = "#4389ff";
+
+        ctx.fillRect(-28, -5, 14, 10);
+        ctx.fillRect(14, -5, 14, 10);
+
+        ctx.restore();
+    }
+}
+
+/* =========================
+   SHOOTING STARS
+========================= */
+
+function createShootingStar() {
+
+    const side = Math.random() < .5;
+
+    shootingStars.push({
+        x: side ? -100 : Math.random() * W,
+        y: side ? Math.random() * H : -100,
+        vx: side
+            ? 500 + Math.random() * 450
+            : (Math.random() - .5) * 300,
+        vy: side
+            ? (Math.random() - .5) * 300
+            : 500 + Math.random() * 450,
+        life: 3,
+        radius: 5
+    });
+}
+
+function updateShootingStars(dt) {
+
+    for (let i = shootingStars.length - 1; i >= 0; i--) {
+
+        const s = shootingStars[i];
+
+        s.x += s.vx * dt;
+        s.y += s.vy * dt;
+        s.life -= dt;
+
+        if (
+            s.life <= 0 ||
+            s.x < -300 ||
+            s.x > W + 300 ||
+            s.y < -300 ||
+            s.y > H + 300
+        ) {
+            shootingStars.splice(i, 1);
+            continue;
+        }
+
+        if (
+            Math.hypot(
+                s.x - player.x,
+                s.y - player.y
+            ) <
+            s.radius + player.radius + 4
+        ) {
+            failGame();
+        }
+    }
+}
+
+function drawShootingStars() {
+
+    for (const s of shootingStars) {
+
+        ctx.save();
+
+        ctx.shadowBlur = 18;
+        ctx.shadowColor = "#fff";
+
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 3;
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            s.x - s.vx * .06,
+            s.y - s.vy * .06
+        );
+
+        ctx.lineTo(s.x, s.y);
+
+        ctx.stroke();
+
+        ctx.restore();
+    }
+}
+
+/* =========================
+   SPACE WORM
+========================= */
+
+const worm = {
+    active: false,
+    state: "idle",
+
+    x: 0,
+    y: 0,
+
+    vx: 0,
+    vy: 0,
+
+    angle: 0,
+
+    speed: 170,
+
+    radius: 42,
+
+    segments: [],
+
+    segmentCount: 17,
+    spacing: 28,
+
+    life: 0,
+    target: null,
+
+    targetTimer: 0,
+    turnTimer: 0
+};
+
+function spawnWorm() {
+
+    worm.active = true;
+    worm.state = "enter";
+
+    const side = Math.floor(Math.random() * 4);
+
+    if (side === 0) {
+        worm.x = -350;
+        worm.y = Math.random() * H;
+        worm.angle = (Math.random() - .5) * .7;
+    }
+
+    if (side === 1) {
+        worm.x = W + 350;
+        worm.y = Math.random() * H;
+        worm.angle = Math.PI + (Math.random() - .5) * .7;
+    }
+
+    if (side === 2) {
+        worm.x = Math.random() * W;
+        worm.y = -350;
+        worm.angle = Math.PI / 2 + (Math.random() - .5) * .7;
+    }
+
+    if (side === 3) {
+        worm.x = Math.random() * W;
+        worm.y = H + 350;
+        worm.angle = -Math.PI / 2 + (Math.random() - .5) * .7;
+    }
+
+    worm.vx = Math.cos(worm.angle) * worm.speed;
+    worm.vy = Math.sin(worm.angle) * worm.speed;
+
+    worm.life = 7 + Math.random() * 9;
+
+    worm.target = null;
+    worm.targetTimer = 0;
+
+    worm.segments = [];
+
+    for (let i = 0; i < worm.segmentCount; i++) {
+
+        worm.segments.push({
+            x: worm.x - Math.cos(worm.angle) * i * worm.spacing,
+            y: worm.y - Math.sin(worm.angle) * i * worm.spacing,
+            size: worm.radius * (1 - i / worm.segmentCount * .65)
+        });
+    }
+
+    wormStatus.classList.remove("hidden");
+
+    warnEl.style.display = "block";
+    warnEl.textContent = "⚠ GIANT SPACE WORM INBOUND!";
+}
+
+function chooseWormTarget() {
+
+    const targets = [];
+
+    for (const a of asteroids) {
+        targets.push({
+            object: a,
+            type: "asteroid"
+        });
+    }
+
+    for (const s of shootingStars) {
+        targets.push({
+            object: s,
+            type: "star"
+        });
+    }
+
+    for (const a of aliens) {
+        targets.push({
+            object: a,
+            type: "alien"
+        });
+    }
+
+    if (!targets.length) {
+        worm.target = null;
+        return;
+    }
+
+    let closest = null;
+    let closestDist = 700;
+
+    for (const t of targets) {
+
+        const d = Math.hypot(
+            t.object.x - worm.x,
+            t.object.y - worm.y
+        );
+
+        if (d < closestDist) {
+            closestDist = d;
+            closest = t;
+        }
+    }
+
+    worm.target = closest;
+}
+
+function updateWorm(dt) {
+
+    if (!worm.active) {
+
+        wormTimer -= dt;
+
+        if (wormTimer <= 0) {
+            spawnWorm();
+        }
+
+        return;
+    }
+
+    worm.life -= dt;
+    worm.targetTimer -= dt;
+
+    if (worm.targetTimer <= 0) {
+        chooseWormTarget();
+        worm.targetTimer = .7 + Math.random() * .8;
+    }
+
+    /*
+       After enough time the worm decides to leave.
+    */
+
+    if (
+        worm.life <= 0 &&
+        worm.state !== "exit"
+    ) {
+        worm.state = "exit";
+        worm.target = null;
+    }
+
+    let desiredAngle = worm.angle;
+
+    if (worm.state === "exit") {
+
+        const margin = 500;
+
+        let targetX = W / 2;
+        let targetY = H / 2;
+
+        if (worm.x < 0) targetX = -margin;
+        else if (worm.x > W) targetX = W + margin;
+        else if (worm.y < 0) targetY = -margin;
+        else if (worm.y > H) targetY = H + margin;
+        else {
+
+            const distances = [
+                { d: worm.x, x: -margin, y: worm.y },
+                { d: W - worm.x, x: W + margin, y: worm.y },
+                { d: worm.y, x: worm.x, y: -margin },
+                { d: H - worm.y, x: worm.x, y: H + margin }
+            ];
+
+            distances.sort((a,b) => a.d - b.d);
+
+            targetX = distances[0].x;
+            targetY = distances[0].y;
+        }
+
+        desiredAngle = Math.atan2(
+            targetY - worm.y,
+            targetX - worm.x
+        );
+
+    } else if (worm.target) {
+
+        desiredAngle = Math.atan2(
+            worm.target.object.y - worm.y,
+            worm.target.object.x - worm.x
+        );
+
+    } else {
+
+        worm.turnTimer -= dt;
+
+        if (worm.turnTimer <= 0) {
+
+            desiredAngle =
+                worm.angle +
+                (Math.random() - .5) * 1.4;
+
+            worm.turnTimer =
+                .7 + Math.random() * 1.4;
+        }
+    }
+
+    let difference =
+        normalizeAngle(desiredAngle - worm.angle);
+
+    difference =
+        Math.max(-1.7 * dt, Math.min(1.7 * dt, difference));
+
+    worm.angle += difference;
+
+    const speed =
+        worm.state === "exit"
+        ? 230
+        : worm.speed;
+
+    worm.vx = Math.cos(worm.angle) * speed;
+    worm.vy = Math.sin(worm.angle) * speed;
+
+    worm.x += worm.vx * dt;
+    worm.y += worm.vy * dt;
+
+    updateWormSegments();
+
+    worm.state =
+        worm.state === "enter" &&
+        worm.x > -100 &&
+        worm.x < W + 100 &&
+        worm.y > -100 &&
+        worm.y < H + 100
+        ? "roaming"
+        : worm.state;
+
+    wormEatThings();
+
+    if (
+        worm.state === "exit" &&
+        (
+            worm.x < -600 ||
+            worm.x > W + 600 ||
+            worm.y < -600 ||
+            worm.y > H + 600
+        )
+    ) {
+
+        worm.active = false;
+        worm.state = "idle";
+
+        wormTimer =
+            6 + Math.random() * 13;
+
+        wormStatus.classList.add("hidden");
+
+        if (!beams.some(b => b.state === "warning")) {
+            warnEl.style.display = "none";
+        }
+    }
+
+    if (
+        Math.hypot(
+            worm.x - player.x,
+            worm.y - player.y
+        ) <
+        worm.radius + player.radius
+    ) {
+        failGame();
+    }
+}
+
+function normalizeAngle(a) {
+
+    while (a > Math.PI) a -= Math.PI * 2;
+    while (a < -Math.PI) a += Math.PI * 2;
+
+    return a;
+}
+
+function updateWormSegments() {
+
+    if (!worm.segments.length) return;
+
+    worm.segments[0].x = worm.x;
+    worm.segments[0].y = worm.y;
+
+    for (let i = 1; i < worm.segments.length; i++) {
+
+        const prev = worm.segments[i - 1];
+        const current = worm.segments[i];
+
+        const dx = prev.x - current.x;
+        const dy = prev.y - current.y;
+
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > worm.spacing) {
+
+            const move =
+                (dist - worm.spacing) * .75;
+
+            current.x += dx / dist * move;
+            current.y += dy / dist * move;
+        }
+    }
+}
+
+function wormEatThings() {
+
+    /*
+       Eat asteroids.
+    */
+
+    for (let i = asteroids.length - 1; i >= 0; i--) {
+
+        const a = asteroids[i];
+
+        if (
+            Math.hypot(
+                worm.x - a.x,
+                worm.y - a.y
+            ) <
+            worm.radius + a.radius
+        ) {
+
+            asteroids.splice(i, 1);
+
+            score += a.size * 10;
+
+            explode(a.x, a.y, 14);
+
+            worm.target = null;
+        }
+    }
+
+    /*
+       Eat shooting stars.
+    */
+
+    for (let i = shootingStars.length - 1; i >= 0; i--) {
+
+        const s = shootingStars[i];
+
+        if (
+            Math.hypot(
+                worm.x - s.x,
+                worm.y - s.y
+            ) <
+            worm.radius + 15
+        ) {
+
+            shootingStars.splice(i, 1);
+
+            score += 15;
+
+            explode(s.x, s.y, 10);
+        }
+    }
+
+    /*
+       Eat alien ships.
+    */
+
+    for (let i = aliens.length - 1; i >= 0; i--) {
+
+        const a = aliens[i];
+
+        if (
+            Math.hypot(
+                worm.x - a.x,
+                worm.y - a.y
+            ) <
+            worm.radius + a.radius
+        ) {
+
+            aliens.splice(i, 1);
+
+            score += 75;
+
+            explode(a.x, a.y, 24);
+        }
+    }
+
+    /*
+       Eat bullets too.
+    */
+
+    for (let i = bullets.length - 1; i >= 0; i--) {
+
+        const b = bullets[i];
+
+        if (
+            Math.hypot(
+                worm.x - b.x,
+                worm.y - b.y
+            ) <
+            worm.radius
+        ) {
+
+            bullets.splice(i, 1);
+
+            explode(b.x, b.y, 3);
+        }
+    }
+}
+
+function drawWorm() {
+
+    if (!worm.active) return;
+
+    ctx.save();
+
+    /*
+       Draw tail first.
+    */
+
+    for (
+        let i = worm.segments.length - 1;
+        i >= 0;
+        i--
+    ) {
+
+        const s = worm.segments[i];
+
+        const wobble =
+            Math.sin(
+                performance.now() * .006 +
+                i * .7
+            ) * 3;
+
+        const r =
+            s.size *
+            (i === 0 ? 1 : .9);
+
+        ctx.save();
+
+        ctx.translate(
+            s.x + wobble,
+            s.y
+        );
+
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = "#b43cff";
+
+        const gradient =
+            ctx.createRadialGradient(
+                0,
+                -r * .2,
+                2,
+                0,
+                0,
+                r
+            );
+
+        gradient.addColorStop(0, "#ff7cff");
+        gradient.addColorStop(1, "#5b1599");
+
+        ctx.fillStyle = gradient;
+
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle =
+            "rgba(255,180,255,.45)";
+
+        ctx.lineWidth = 2;
+
+        ctx.beginPath();
+        ctx.arc(
+            0,
+            0,
+            r * .72,
+            0,
+            Math.PI * 2
+        );
+        ctx.stroke();
+
+        ctx.restore();
+    }
+
+    /*
+       Giant head.
+    */
+
+    ctx.save();
+
+    ctx.translate(worm.x, worm.y);
+    ctx.rotate(worm.angle);
+
+    ctx.shadowBlur = 30;
+    ctx.shadowColor = "#ff3fff";
+
+    const r = worm.radius;
+
+    ctx.fillStyle = "#7816a8";
+
+    ctx.beginPath();
+    ctx.ellipse(
+        0,
+        0,
+        r * 1.35,
+        r,
+        0,
+        0,
+        Math.PI * 2
+    );
+    ctx.fill();
+
+    /*
+       Mouth.
+    */
+
+    ctx.fillStyle = "#16051d";
+
+    ctx.beginPath();
+    ctx.arc(
+        r * .65,
+        0,
+        r * .55,
+        -Math.PI / 2,
+        Math.PI / 2
+    );
+    ctx.fill();
+
+    /*
+       Eyes.
+    */
+
+    ctx.fillStyle = "#fff";
+
+    ctx.beginPath();
+    ctx.arc(-5, -17, 7, 0, Math.PI * 2);
+    ctx.arc(-5, 17, 7, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#ff304f";
+
+    ctx.beginPath();
+    ctx.arc(-2, -17, 3, 0, Math.PI * 2);
+    ctx.arc(-2, 17, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+
+    ctx.restore();
+}
+
+/* =========================
+   PLAYER
+========================= */
+
+function updatePlayer(dt) {
+
+    player.angle =
+        Math.atan2(
+            mouse.y - player.y,
+            mouse.x - player.x
+        );
+
+    if (keys["Space"]) {
+
+        player.vx +=
+            Math.cos(player.angle) *
+            player.thrustPower *
+            60 *
+            dt;
+
+        player.vy +=
+            Math.sin(player.angle) *
+            player.thrustPower *
+            60 *
+            dt;
+
+        thrustParticles();
+    }
+
+    player.vx *= Math.pow(player.friction, dt * 60);
+    player.vy *= Math.pow(player.friction, dt * 60);
+
+    player.x += player.vx * dt;
+    player.y += player.vy * dt;
+
+    /*
+       Wrap player around screen.
+    */
+
+    if (player.x < -20) player.x = W + 20;
+    if (player.x > W + 20) player.x = -20;
+    if (player.y < -20) player.y = H + 20;
+    if (player.y > H + 20) player.y = -20;
+
+    player.fireCooldown -= dt;
+
+    if (keys["KeyZ"]) {
+        fireBullet();
+    }
+}
+
+function drawPlayer() {
+
+    if (!player.alive) return;
+
+    ctx.save();
+
+    ctx.translate(player.x, player.y);
+    ctx.rotate(player.angle);
+
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = "#36dfff";
+
+    ctx.fillStyle = "#dffaff";
+
+    ctx.beginPath();
+
+    ctx.moveTo(20, 0);
+    ctx.lineTo(-14, -11);
+    ctx.lineTo(-9, 0);
+    ctx.lineTo(-14, 11);
+
+    ctx.closePath();
+
+    ctx.fill();
+
+    ctx.strokeStyle = "#38dcff";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+/* =========================
+   ASTEROID UPDATE / DRAW
+========================= */
+
+function updateAsteroids(dt) {
+
+    for (const a of asteroids) {
+
+        a.x += a.vx * dt;
+        a.y += a.vy * dt;
+
+        a.rotation += a.rotationSpeed * dt;
+
+        if (a.x < -a.radius) a.x = W + a.radius;
+        if (a.x > W + a.radius) a.x = -a.radius;
+
+        if (a.y < -a.radius) a.y = H + a.radius;
+        if (a.y > H + a.radius) a.y = -a.radius;
+    }
+}
+
+function drawAsteroids() {
+
+    for (const a of asteroids) {
+
+        ctx.save();
+
+        ctx.translate(a.x, a.y);
+        ctx.rotate(a.rotation);
+
+        ctx.strokeStyle = "#79808e";
+        ctx.lineWidth = 3;
+
+        ctx.fillStyle = "#252a35";
+
+        ctx.beginPath();
+
+        for (let i = 0; i < a.shape.length; i++) {
+
+            const angle =
+                i / a.shape.length *
+                Math.PI * 2;
+
+            const r =
+                a.radius *
+                a.shape[i];
+
+            const x = Math.cos(angle) * r;
+            const y = Math.sin(angle) * r;
+
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        /*
+           Craters.
+        */
+
+        ctx.fillStyle = "rgba(0,0,0,.25)";
+
+        for (let i = 0; i < 3; i++) {
+
+            const angle = i * 2.1;
+
+            ctx.beginPath();
+
+            ctx.arc(
+                Math.cos(angle) * a.radius * .4,
+                Math.sin(angle) * a.radius * .4,
+                a.radius * .12,
+                0,
+                Math.PI * 2
+            );
+
+            ctx.fill();
+        }
+
+        ctx.restore();
+    }
+}
+
+/* =========================
+   BULLET UPDATE
+========================= */
+
+function updateBullets(dt) {
+
+    for (let i = bullets.length - 1; i >= 0; i--) {
+
+        const b = bullets[i];
+
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+
+        b.life -= dt;
+
+        if (
+            b.life <= 0 ||
+            b.x < -100 ||
+            b.x > W + 100 ||
+            b.y < -100 ||
+            b.y > H + 100
+        ) {
+            bullets.splice(i, 1);
+        }
+    }
+}
+
+function drawBullets() {
+
+    for (const b of bullets) {
+
+        ctx.save();
+
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = "#55eaff";
+
+        ctx.fillStyle = "#cfffff";
+
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+    }
+}
+
+/* =========================
+   PARTICLE UPDATE
+========================= */
+
+function updateParticles(dt) {
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+
+        const p = particles[i];
+
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+
+        p.vx *= .98;
+        p.vy *= .98;
+
+        p.life -= dt;
+
+        if (p.life <= 0) {
+            particles.splice(i, 1);
+        }
+    }
+}
+
+function drawParticles() {
+
+    for (const p of particles) {
+
+        const alpha =
+            Math.max(0, p.life / p.maxLife);
+
+        ctx.globalAlpha = alpha;
+
+        if (p.type === "ice") {
+            ctx.fillStyle = "#8df4ff";
+        } else if (p.type === "smoke") {
+            ctx.fillStyle = "#b8d9df";
+        } else if (p.type === "bullet") {
+            ctx.fillStyle = "#fff";
+        } else {
+            ctx.fillStyle = "#ffc95a";
+        }
+
+        ctx.beginPath();
+        ctx.arc(
+            p.x,
+            p.y,
+            p.size,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+    }
+
+    ctx.globalAlpha = 1;
+}
+
+/* =========================
+   COLLISIONS
+========================= */
+
+function checkCollisions() {
+
+    /*
+       Player vs asteroids.
+    */
+
+    for (const a of asteroids) {
+
+        if (
+            Math.hypot(
+                a.x - player.x,
+                a.y - player.y
+            ) <
+            a.radius + player.radius
+        ) {
+            failGame();
+            return;
+        }
+    }
+
+    /*
+       Bullets vs asteroids.
+    */
+
+    for (let i = bullets.length - 1; i >= 0; i--) {
+
+        const b = bullets[i];
+
+        let hit = false;
+
+        for (let j = asteroids.length - 1; j >= 0; j--) {
+
+            const a = asteroids[j];
+
+            if (
+                Math.hypot(
+                    b.x - a.x,
+                    b.y - a.y
+                ) <
+                a.radius
+            ) {
+
+                bullets.splice(i, 1);
+                asteroids.splice(j, 1);
+
+                score +=
+                    a.size === 3
+                    ? 25
+                    : a.size === 2
+                    ? 15
+                    : 10;
+
+                if (a.size > 1) {
+                    splitAsteroid(a);
+                } else {
+                    explode(a.x, a.y, 10);
+                }
+
+                hit = true;
+                break;
+            }
+        }
+
+        if (hit) continue;
+    }
+
+    /*
+       Bullets vs aliens.
+    */
+
+    for (let i = bullets.length - 1; i >= 0; i--) {
+
+        const b = bullets[i];
+
+        for (let j = aliens.length - 1; j >= 0; j--) {
+
+            const a = aliens[j];
+
+            if (
+                Math.hypot(
+                    b.x - a.x,
+                    b.y - a.y
+                ) <
+                a.radius
+            ) {
+
+                bullets.splice(i, 1);
+                aliens.splice(j, 1);
+
+                score += 50;
+
+                explode(a.x, a.y, 20);
+
+                break;
+            }
+        }
+    }
+
+    /*
+       NEVER shoot satellites.
+    */
+
+    for (let i = bullets.length - 1; i >= 0; i--) {
+
+        const b = bullets[i];
+
+        for (const s of satellites) {
+
+            if (
+                Math.hypot(
+                    b.x - s.x,
+                    b.y - s.y
+                ) <
+                s.radius
+            ) {
+
+                failGame();
+                return;
+            }
+        }
+    }
+}
+
+/* =========================
+   CHAOS EVENTS
+========================= */
+
+function triggerChaos() {
+
+    const event =
+        Math.floor(Math.random() * 4);
+
+    chaosStatus.classList.remove("hidden");
+
+    if (event === 0) {
+
+        chaosStatus.textContent =
+            "☄ ASTEROID STORM";
+
+        for (let i = 0; i < 7; i++) {
+
+            const side = Math.floor(Math.random() * 4);
+
+            let x, y;
+
+            if (side === 0) {
+                x = -60;
+                y = Math.random() * H;
+            } else if (side === 1) {
+                x = W + 60;
+                y = Math.random() * H;
+            } else if (side === 2) {
+                x = Math.random() * W;
+                y = -60;
+            } else {
+                x = Math.random() * W;
+                y = H + 60;
+            }
+
+            const angle = Math.atan2(
+                H / 2 - y,
+                W / 2 - x
+            );
+
+            createAsteroid(
+                x,
+                y,
+                Math.random() < .4 ? 2 : 1,
+                angle + (Math.random() - .5)
+            );
+        }
+    }
+
+    else if (event === 1) {
+
+        chaosStatus.textContent =
+            "☄ SHOOTING STAR BURST";
+
+        for (let i = 0; i < 8; i++) {
+            setTimeout(() => {
+                if (gameRunning) {
+                    createShootingStar();
+                }
+            }, i * 120);
+        }
+    }
+
+    else if (event === 2) {
+
+        chaosStatus.textContent =
+            "🛸 ALIEN SWARM";
+
+        for (let i = 0; i < 4; i++) {
+            createAlien();
+        }
+    }
+
+    else {
+
+        chaosStatus.textContent =
+            "⚠ CHAOS SURGE";
+
+        for (let i = 0; i < 5; i++) {
+
+            createAsteroid(
+                Math.random() * W,
+                Math.random() * H,
+                1
+            );
+        }
+
+        for (let i = 0; i < 4; i++) {
+            createShootingStar();
+        }
+
+        screenShake = 12;
+    }
+
+    setTimeout(() => {
+        chaosStatus.classList.add("hidden");
+    }, 2500);
+}
+
+/* =========================
+   GAME START
+========================= */
+
+function startGame() {
+
+    gameRunning = true;
+    paused = false;
+
+    homeScreen.classList.add("hidden");
+    failScreen.classList.add("hidden");
+
+    hud.style.display = "flex";
+    warnEl.style.display = "none";
+
+    score = 0;
+
+    scoreEl.textContent = score;
+
+    player.x = W / 2;
+    player.y = H / 2;
+
+    player.vx = 0;
+    player.vy = 0;
+
+    player.alive = true;
+
+    asteroids = [];
+    bullets = [];
+    particles = [];
+    aliens = [];
+    satellites = [];
+    shootingStars = [];
+    beams = [];
+
+    worm.active = false;
+    worm.state = "idle";
+    worm.segments = [];
+
+    asteroidTimer = 2;
+    alienTimer = 4;
+    satelliteTimer = 7;
+    shootingStarTimer = 3;
+    chaosTimer = 10;
+
+    wormTimer = 6 + Math.random() * 8;
+
+    tractorStatus.classList.add("hidden");
+    wormStatus.classList.add("hidden");
+    chaosStatus.classList.add("hidden");
+
+    /*
+       Initial asteroid field.
+    */
+
+    for (let i = 0; i < 5; i++) {
+
+        createAsteroid(
+            Math.random() * W,
+            Math.random() * H,
+            3
+        );
+    }
+
+    /*
+       A couple initial enemies.
+    */
+
+    createAlien();
+
+    lastTime = performance.now();
+}
+
+/* =========================
+   FAIL
+========================= */
+
+function failGame() {
+
+    if (!gameRunning) return;
+
+    gameRunning = false;
+    player.alive = false;
+
+    finalScoreEl.textContent = score;
+
+    let isNewHigh = false;
+
+    if (score > highScore) {
+
+        highScore = score;
+
+        localStorage.setItem(
+            "spaceChaosHigh",
+            highScore
+        );
+
+        highEl.textContent = highScore;
+
+        isNewHigh = true;
+    }
+
+    newHighEl.style.display =
+        isNewHigh ? "block" : "none";
+
+    failScreen.classList.remove("hidden");
+
+    warnEl.style.display = "none";
+    hud.style.display = "none";
+}
+
+/* =========================
+   MAIN UPDATE
+========================= */
+
+function update(dt) {
+
+    if (!gameRunning || paused) return;
+
+    updateBackground(dt);
+
+    asteroidTimer -= dt;
+    alienTimer -= dt;
+    satelliteTimer -= dt;
+    shootingStarTimer -= dt;
+    chaosTimer -= dt;
+
+    if (asteroidTimer <= 0) {
+
+        /*
+           Spawn rate gets faster as score increases.
+        */
+
+        const difficulty =
+            Math.min(1.5, score / 700);
+
+        createAsteroid(
+            undefined,
+            undefined,
+            Math.random() < .3 ? 3 : 2
+        );
+
+        asteroidTimer =
+            Math.max(
+                .45,
+                2.2 - difficulty
+            );
+    }
+
+    if (alienTimer <= 0) {
+
+        createAlien();
+
+        /*
+           Eventually multiple aliens.
+        */
+
+        if (score > 250 && Math.random() < .35) {
+            createAlien();
+        }
+
+        alienTimer =
+            Math.max(
+                1.8,
+                5 - score / 500
+            );
+    }
+
+    if (satelliteTimer <= 0) {
+
+        createSatellite();
+
+        satelliteTimer =
+            9 + Math.random() * 8;
+    }
+
+    if (shootingStarTimer <= 0) {
+
+        createShootingStar();
+
+        if (Math.random() < .25) {
+            createShootingStar();
+        }
+
+        shootingStarTimer =
+            Math.max(
+                .7,
+                3 - score / 800
+            );
+    }
+
+    if (chaosTimer <= 0) {
+
+        triggerChaos();
+
+        chaosTimer =
+            12 + Math.random() * 12;
+    }
+
+    updatePlayer(dt);
+    updateAsteroids(dt);
+    updateBullets(dt);
+    updateParticles(dt);
+
+    updateAliens(dt);
+    updateBeams(dt);
+    updateTractor(dt);
+
+    updateSatellites(dt);
+    updateShootingStars(dt);
+
+    updateWorm(dt);
+
+    checkCollisions();
+
+    scoreEl.textContent = score;
+
+    if (screenShake > 0) {
+        screenShake -= dt * 30;
+    }
+}
+
+/* =========================
+   DRAW
+========================= */
+
+function draw() {
+
+    ctx.save();
+
+    if (screenShake > 0) {
+
+        ctx.translate(
+            (Math.random() - .5) * screenShake,
+            (Math.random() - .5) * screenShake
+        );
+    }
+
+    drawBackground();
+
+    drawShootingStars();
+    drawSatellites();
+    drawAsteroids();
+
+    drawAliens();
+    drawBeams();
+
+    drawWorm();
+
+    drawBullets();
+    drawParticles();
+
+    drawPlayer();
+
+    ctx.restore();
+
+    if (paused && gameRunning) {
+
+        ctx.fillStyle = "rgba(0,0,0,.45)";
+        ctx.fillRect(0, 0, W, H);
+
+        ctx.fillStyle = "white";
+        ctx.textAlign = "center";
+        ctx.font = "bold 40px Arial";
+
+        ctx.fillText(
+            "PAUSED",
+            W / 2,
+            H / 2
+        );
+    }
+}
+
+/* =========================
+   GAME LOOP
+========================= */
+
+function loop(now) {
+
+    const dt =
+        Math.min(
+            .033,
+            (now - lastTime) / 1000
+        );
+
+    lastTime = now;
+
+    update(dt);
+    draw();
+
+    requestAnimationFrame(loop);
+}
+
+requestAnimationFrame(loop);
+
+</script>
+</body>
+</html>
